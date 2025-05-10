@@ -85,7 +85,7 @@ class Robot:
     # default_qpos = np.array([0.0,0.0,0.27,1.0,0.0,0.0,0.0,0.0,0.9,-1.8,0.0,0.9,-1.8,0.0,0.9,-1.8,0.0,0.9,-1.8])
     # self.data.qpos = default_qpos.copy()
     tree = ET.parse(xml_path)
-    self.viewer_paused = True
+    self.viewer_paused = False
     root = tree.getroot()
     kf_element = root.find(".//key[@name='home']")
     if kf_element is not None and 'qpos' in kf_element.attrib:

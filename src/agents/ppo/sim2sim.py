@@ -367,8 +367,8 @@ class Sim2sim:
                 self._gait_generator.desired_contact_state,
                 swing_foot_position=desired_foot_positions)
             # print("motor_action")
-            # print(motor_action)
-            # exit()
+            print(motor_action)
+            exit()
             self._robot.step(motor_action)
             self._obs_buf = self.get_obs()
             new_cycle_count = np.floor(self._gait_generator.true_phase / (2 * np.pi)).astype(np.int64)
@@ -444,6 +444,8 @@ class Sim2sim:
             # print("state")
             # print(np.round(state,2))
             # exit()    
+            if self._robot.base_position_world[0,2] < 0.15:
+                break
 
         self._robot.viewer.close()
 
