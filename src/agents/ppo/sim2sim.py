@@ -42,7 +42,8 @@ from src.robots.sim2sim.motors import MotorControlMode
 from src.controllers.sim2sim import phase_gait_generator_numpy, raibert_swing_leg_controller_numpy,qp_torque_optimizer_numpy
 from src.controllers.sim2sim.l1_torque_optimizer_numpy import L1TorqueOptimizer
 # from src.controllers.sim2sim.qp_torque_optimizer_numpy import QPTorqueOptimizer
-
+import mujoco
+import matplotlib.pyplot as plt
 class cmd:
     vx = 0.4
     vy = 0.0
@@ -98,7 +99,8 @@ class Sim2simCfg:
     cfg.terminate_on_limb_contact   = False
     cfg.terminate_on_height         = 0.15
     cfg.use_penetrating_contact     = False
-    cfg.optimizer = 'qp'
+    cfg.optimizer = "l1"
+    cfg.render = True
 
 def quaternion_to_euler_array(quat):
     # Ensure quaternion is in the correct format [x, y, z, w]
@@ -173,7 +175,8 @@ class Sim2sim:
                           init_positions=self._init_positions,
                           sim_config=cfg.sim_config,
                           motor_control_mode=MotorControlMode.HYBRID,
-                          motor_torque_delay_steps=self.cfg.get('motor_torque_delay_steps', 0)) 
+                          motor_torque_delay_steps=self.cfg.get('motor_torque_delay_steps', 0),
+                          render = self.cfg.render) 
         
         self._robot.set_foot_frictions(self.cfg.get('foot_friction', np.array([5., 5., 5., 5.])))
         self._gait_generator = phase_gait_generator_numpy.PhaseGaitGenerator(self._robot, cfg.gait)
@@ -183,8 +186,9 @@ class Sim2sim:
         
 
         if self.cfg.optimizer == "l1":
-        # L = np.diag([10, 10, 10, 150, 150, 150])
-            L = np.diag([500, 500, 500, 100, 100, 100])
+
+            L = np.diag([100, 100, 100, 15, 15, 15])
+            # L = np.diag([500, 500, 500, 100, 100, 100])
             
             self._torque_optimizer = L1TorqueOptimizer(
                     self._robot,
@@ -202,7 +206,7 @@ class Sim2sim:
                     },
                     l1_kwargs={
                     'observer_gain': L,    # tune for eigenvalues of (−L)
-                    'adapt_gain': 5.0,               # Γ
+                    'adapt_gain': 10.0,               # Γ
                     'filter_cutoff': 20.0,            # ω_c (Hz)
                     'dt': self.sim_config.dt
                     }
@@ -367,8 +371,7 @@ class Sim2sim:
                 self._gait_generator.desired_contact_state,
                 swing_foot_position=desired_foot_positions)
             # print("motor_action")
-            print(motor_action)
-            exit()
+            
             self._robot.step(motor_action)
             self._obs_buf = self.get_obs()
             new_cycle_count = np.floor(self._gait_generator.true_phase / (2 * np.pi)).astype(np.int64)
@@ -416,7 +419,7 @@ class Sim2sim:
         # print("foot_pos",np.round(self._robot.foot_positions_in_base_frame,2))
         return obs
 
-    def run_mujoco(self,policy):
+    def run_mujoco(self,policy,params):
         """
         Run the Mujoco simulation using the provided policy and configuration.
 
@@ -428,10 +431,22 @@ class Sim2sim:
             None
         """
         step_count = 0
+
+
+        trunk_body_id = mujoco.mj_name2id(self._robot.model, mujoco.mjtObj.mjOBJ_BODY, "trunk")
+        #checking default mass, com, moment of inertia
+        print('checking default params')
+        print('mass:',self._robot.model.body_mass[trunk_body_id])
+        print('com',self._robot.model.body_ipos[trunk_body_id])
+        print('moment of inertia',self._robot.model.body_inertia[trunk_body_id])
+
+        self._robot.model.body_mass[trunk_body_id] = params
+        print('mass:',self._robot.model.body_mass[trunk_body_id])
        
         state = self.reset()
         
         # exit()
+        startpos_x = self._robot.base_position[0][0]
         for _ in tqdm(range(int(self.sim_config.sim_duration / self.sim_config.dt)), desc="Simulating..."):
             step_count += 1
 
@@ -446,8 +461,11 @@ class Sim2sim:
             # exit()    
             if self._robot.base_position_world[0,2] < 0.15:
                 break
+        if self.cfg.render:
+            self._robot.viewer.close()
+        print(self._robot.base_position[0][0] - startpos_x)
+        return (self._robot.base_position[0][0] - startpos_x)
 
-        self._robot.viewer.close()
 
 
 if __name__ == '__main__':
@@ -458,7 +476,16 @@ if __name__ == '__main__':
                         help='Run to load from.')
     parser.add_argument('--terrain', action='store_true', help='terrain or plane')
     args = parser.parse_args()
-
-    policy = torch.jit.load(args.load_model)
-    sim2sim = Sim2sim(Sim2simCfg())
-    sim2sim.run_mujoco(policy)
+    mass_list = [10.204]#np.arange(5.204,12.204,0.5)
+    dist_list = []
+    for mass in mass_list:
+        policy = torch.jit.load(args.load_model)
+        sim2sim = Sim2sim(Sim2simCfg())
+        dist_list.append(sim2sim.run_mujoco(policy,mass))
+    try:
+        data = np.load('dist_log.npz',allow_pickle=True)
+        data = dict(data)
+    except:
+        data={}
+    data['qp_mass_dist'] = dist_list
+    np.savez('dist_log.npz',**data)

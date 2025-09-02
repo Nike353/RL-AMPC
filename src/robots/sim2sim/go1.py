@@ -48,6 +48,7 @@ class Go1(Robot):
       init_positions: _ARRAY,
       motor_control_mode: MotorControlMode,
       motor_torque_delay_steps: int = 0,
+      render:bool = False,
   ):
 
     motors = MotorGroup(
@@ -253,7 +254,8 @@ class Go1(Robot):
                          "FL_thigh",
                          "RR_thigh",
                          "RL_thigh",
-                     ])
+                     ],
+                     render=render)
 
   @property
   def hip_positions_in_body_frame(self):

@@ -136,25 +136,32 @@ class L1TorqueOptimizer:
         corrected_acc[0, :3]  -= delta[:3]
         corrected_acc[0, 3:]  -= delta[3:]
 
-        _, _, grf_corr, _, _ = \
+        motor_torques_corrected, _, grf_corr, _, _ = \
             self._qp._solve_joint_torques(foot_contact_state, corrected_acc)
         flat_grf_corr = grf_corr.flatten()
         self.log['grf_corrected'].append(flat_grf_corr.copy())
         self.log['time'].append(len(self.log['time']) * self.dt)
 
         from src.robots.sim2sim.motors import MotorCommand
-        jac = self._qp._robot.all_foot_jacobian
-        motor_torques_corr = -np.matmul(
-            grf_corr[:, None, :],
-            jac
-        )[0, 0, :]
+        # jac = self._qp._robot.all_foot_jacobian
+        # motor_torques_corr = -np.matmul(
+        #     grf_corr[:, None, :],
+        #     jac
+        # )[0, 0, :]
+        contact_state_expanded = np.repeat(foot_contact_state,3,axis=1)
+        desired_torque = np.where(contact_state_expanded, motor_torques_corrected,
+                                 np.zeros_like(motor_torques_corrected))
+        desired_torque = np.clip(desired_torque,
+                                a_max=self._qp._robot.motor_group.max_torques,
+                                a_min=self._qp._robot.motor_group.min_torques)
+
 
         mc_corrected = MotorCommand(
             desired_position     = mc.desired_position,
             kp                   = mc.kp,
             desired_velocity     = mc.desired_velocity,
             kd                   = mc.kd,
-            desired_extra_torque = motor_torques_corr
+            desired_extra_torque = 1*desired_torque
         )
         return mc_corrected, corrected_acc, solved_acc, qp_cost, num_clips
 
