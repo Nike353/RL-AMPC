@@ -1,5 +1,5 @@
 # RL-AFQP: Augmenting Learned Centroidal Controller with Adaptive Force Control
-![](https://github.com/Nike353/RL-AFQP/l1_adaptive/assets/viz.gif)
+![](./assets/viz.gif)
 
 Code-Repository for Course Project: 16745 (OCRL)
 
